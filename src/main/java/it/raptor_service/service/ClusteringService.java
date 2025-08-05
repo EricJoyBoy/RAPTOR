@@ -131,8 +131,8 @@ public class ClusteringService {
             return localClusterMap.entrySet().stream()
                     .map(entry -> new Cluster(
                             startId + entry.getKey(),
-                            entry.getValue().stream().map(TextEmbedding::getText).collect(Collectors.toList()),
-                            entry.getValue().stream().map(TextEmbedding::getId).collect(Collectors.toList())
+                            entry.getValue().stream().map(TextEmbedding::getText).toList(),
+                            entry.getValue().stream().map(TextEmbedding::getId).toList()
                     ))
                     .collect(Collectors.toList());
 
@@ -140,8 +140,8 @@ public class ClusteringService {
             System.err.println("Local clustering failed: " + e.getMessage());
             return Collections.singletonList(
                     new Cluster(startId,
-                            embeddings.stream().map(TextEmbedding::getText).collect(Collectors.toList()),
-                            embeddings.stream().map(TextEmbedding::getId).collect(Collectors.toList()))
+                            embeddings.stream().map(TextEmbedding::getText).toList(),
+                            embeddings.stream().map(TextEmbedding::getId).toList())
             );
         }
     }
