@@ -217,7 +217,7 @@ public class ClusteringService {
      */
     private Cluster createSingleCluster(List<TextEmbedding> embeddings) {
         return new Cluster(0,
-                embeddings.stream().map(TextEmbedding::getText).collect(Collectors.toList()),
-                embeddings.stream().map(TextEmbedding::getId).collect(Collectors.toList()));
+                embeddings.stream().map(TextEmbedding::getText).toList(),
+                embeddings.stream().map(TextEmbedding::getId).toList());
     }
 }
