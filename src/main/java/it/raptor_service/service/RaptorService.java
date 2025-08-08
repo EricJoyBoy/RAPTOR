@@ -10,8 +10,10 @@ import org.springframework.ai.chat.model.ChatModel;
 import org.springframework.ai.chat.prompt.Prompt;
 import org.springframework.ai.chat.prompt.PromptTemplate;
 import org.springframework.ai.embedding.EmbeddingModel;
+import org.springframework.ai.embedding.EmbeddingOptions;
 import org.springframework.ai.embedding.EmbeddingRequest;
 import org.springframework.ai.embedding.EmbeddingResponse;
+import org.springframework.ai.ollama.api.OllamaOptions;
 import org.springframework.stereotype.Service;
 
 import java.util.*;
@@ -141,7 +143,7 @@ public class RaptorService {
         try {
             log.debug("Generating embeddings for {} texts", texts.size());
 
-            EmbeddingRequest request = new EmbeddingRequest(texts, null);
+            EmbeddingRequest request = new EmbeddingRequest(texts, OllamaOptions.builder().build());
             EmbeddingResponse response = embeddingModel.call(request);
 
             List<TextEmbedding> embeddings = IntStream.range(0, texts.size())
