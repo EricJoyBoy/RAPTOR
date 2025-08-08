@@ -23,7 +23,7 @@
 	<properties>
 		<maven.compiler.source>21</maven.compiler.source>
 		<maven.compiler.target>21</maven.compiler.target>
-		<spring-ai.version>1.0.0-M5</spring-ai.version>
+		<spring-ai.version>1.0.0-M6</spring-ai.version>
 		<weka.version>3.8.6</weka.version>
 	</properties>
 
