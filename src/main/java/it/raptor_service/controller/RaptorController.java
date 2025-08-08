@@ -10,6 +10,7 @@ import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
+import lombok.Data;
 import lombok.extern.slf4j.Slf4j;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -127,49 +128,14 @@ public class RaptorController {
     }
 
     @ValidRaptorRequest
+    @Data
     public static class ProcessRequest {
         @NotBlank(message = "Text cannot be empty")
         private String text;
-        
+
         private Integer chunkSize;
-        
+
         private Integer maxLevels;
-
-        // Default constructor
-        public ProcessRequest() {
-        }
-
-        // All-args constructor
-        public ProcessRequest(String text, Integer chunkSize, Integer maxLevels) {
-            this.text = text;
-            this.chunkSize = chunkSize;
-            this.maxLevels = maxLevels;
-        }
-
-        // Getters and Setters
-        public String getText() {
-            return text;
-        }
-
-        public void setText(String text) {
-            this.text = text;
-        }
-
-        public Integer getChunkSize() {
-            return chunkSize;
-        }
-
-        public void setChunkSize(Integer chunkSize) {
-            this.chunkSize = chunkSize;
-        }
-
-        public Integer getMaxLevels() {
-            return maxLevels;
-        }
-
-        public void setMaxLevels(Integer maxLevels) {
-            this.maxLevels = maxLevels;
-        }
     }
 
 }
