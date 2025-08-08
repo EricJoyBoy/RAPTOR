@@ -10,6 +10,7 @@ import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
+import lombok.extern.slf4j.Slf4j;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.ResponseEntity;
@@ -23,9 +24,9 @@ import java.util.Map;
 @RestController
 @RequestMapping("/api/raptor")
 @CrossOrigin(origins = "*")
+@Slf4j
 public class RaptorController {
 
-    private static final Logger log = LoggerFactory.getLogger(RaptorController.class);
     private static final int MAX_FILE_SIZE_MB = 10;
     private static final int MAX_TEXT_LENGTH = 1000000;
 
@@ -44,27 +45,9 @@ public class RaptorController {
                 request.getChunkSize(), request.getMaxLevels());
     
         try {
-            // Validate text length
-            if (request.getText().length() > MAX_TEXT_LENGTH) {
-                log.warn("Text too long: {} characters", request.getText().length());
-                return ResponseEntity.badRequest()
-                        .body(new ProcessResponse("Error: Text too long. Maximum allowed: " + MAX_TEXT_LENGTH + " characters", null));
-            }
-    
             int chunkSize = request.getChunkSize() != null ? request.getChunkSize() : 2000;
             int maxLevels = request.getMaxLevels() != null ? request.getMaxLevels() : 3;
-    
-            // Validate parameters
-            if (chunkSize < 100 || chunkSize > 10000) {
-                return ResponseEntity.badRequest()
-                        .body(new ProcessResponse("Error: Chunk size must be between 100 and 10000", null));
-            }
-    
-            if (maxLevels < 1 || maxLevels > 10) {
-                return ResponseEntity.badRequest()
-                        .body(new ProcessResponse("Error: Max levels must be between 1 and 10", null));
-            }
-    
+
             RaptorResult result = raptorService.processText(request.getText(), chunkSize, maxLevels);
             return ResponseEntity.ok(new ProcessResponse("Success", result));
     
