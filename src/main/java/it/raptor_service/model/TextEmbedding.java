@@ -1,6 +1,6 @@
 package it.raptor_service.model;
 
-import lombok.AllArgsConstructor;
+ import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
