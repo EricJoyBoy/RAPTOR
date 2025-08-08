@@ -1,17 +1,15 @@
 package it.raptor_service.model;
 
+import lombok.AllArgsConstructor;
+import lombok.Data;
+import lombok.NoArgsConstructor;
+
 import java.util.List;
 
-// Global cluster for hierarchical clustering
+@Data
+@NoArgsConstructor
+@AllArgsConstructor
 public class GlobalCluster {
-    private final int id;
-    private final List<TextEmbedding> embeddings;
-
-    public GlobalCluster(int id, List<TextEmbedding> embeddings) {
-        this.id = id;
-        this.embeddings = embeddings;
-    }
-
-    public int getId() { return id; }
-    public List<TextEmbedding> getEmbeddings() { return embeddings; }
+    private int id;
+    private List<TextEmbedding> embeddings;
 }

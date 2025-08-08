@@ -1,22 +1,17 @@
 package it.raptor_service.model;
 
+import lombok.AllArgsConstructor;
+import lombok.Data;
+import lombok.NoArgsConstructor;
+
 import java.util.List;
 
+@Data
+@NoArgsConstructor
+@AllArgsConstructor
 public class ClusterSummary {
-    private final int clusterId;
-    private final int level;
-    private final String summary;
-    private final List<Integer> originalTextIds;
-
-    public ClusterSummary(int clusterId, int level, String summary, List<Integer> originalTextIds) {
-        this.clusterId = clusterId;
-        this.level = level;
-        this.summary = summary;
-        this.originalTextIds = originalTextIds;
-    }
-
-    public int getClusterId() { return clusterId; }
-    public int getLevel() { return level; }
-    public String getSummary() { return summary; }
-    public List<Integer> getOriginalTextIds() { return originalTextIds; }
+    private int id;
+    private int level;
+    private String summary;
+    private List<Integer> textIds;
 }

@@ -1,19 +1,16 @@
 package it.raptor_service.model;
 
+import lombok.AllArgsConstructor;
+import lombok.Data;
+import lombok.NoArgsConstructor;
+
 import java.util.List;
 
+@Data
+@NoArgsConstructor
+@AllArgsConstructor
 public class Cluster {
-    private final int id;
-    private final List<String> texts;
-    private final List<Integer> textIds;
-
-    public Cluster(int id, List<String> texts, List<Integer> textIds) {
-        this.id = id;
-        this.texts = texts;
-        this.textIds = textIds;
-    }
-
-    public int getId() { return id; }
-    public List<String> getTexts() { return texts; }
-    public List<Integer> getTextIds() { return textIds; }
+    private int id;
+    private List<String> texts;
+    private List<Integer> textIds;
 }

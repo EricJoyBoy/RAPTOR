@@ -1,6 +1,7 @@
 package it.raptor_service.service;
 
 
+import it.raptor_service.config.RaptorProperties;
 import it.raptor_service.model.Cluster;
 import it.raptor_service.model.GlobalCluster;
 import it.raptor_service.model.TextEmbedding;
@@ -18,9 +19,13 @@ import java.util.stream.Collectors;
 @Service
 public class ClusteringService {
 
-    private static final double CLUSTER_THRESHOLD = 0.1;
-    private static final int MAX_CLUSTERS = 50;
-    private static final Random random = new Random(224); // Fixed seed for reproducibility
+    private final RaptorProperties properties;
+    private final Random random;
+
+    public ClusteringService(RaptorProperties properties) {
+        this.properties = properties;
+        this.random = new Random(properties.getClustering().getSeed());
+    }
 
     /**
      * Perform hierarchical clustering on embeddings
@@ -71,7 +76,7 @@ public class ClusteringService {
         clusterer.setSeed(224);
 
         // Determine optimal number of clusters
-        int optimalClusters = findOptimalClusters(data, Math.min(MAX_CLUSTERS, embeddings.size()));
+        int optimalClusters = findOptimalClusters(data, Math.min(properties.getClustering().getMaxClusters(), embeddings.size()));
         clusterer.setNumClusters(optimalClusters);
 
         clusterer.buildClusterer(data);
@@ -85,7 +90,7 @@ public class ClusteringService {
 
             // Assign to clusters based on probability threshold
             for (int j = 0; j < probabilities.length; j++) {
-                if (probabilities[j] > CLUSTER_THRESHOLD) {
+                if (probabilities[j] > properties.getClustering().getClusterThreshold()) {
                     clusterMap.computeIfAbsent(j, k -> new ArrayList<>())
                             .add(embeddings.get(i));
                 }

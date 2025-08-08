@@ -1,24 +1,17 @@
 package it.raptor_service.model;
 
+import lombok.AllArgsConstructor;
+import lombok.Data;
+import lombok.NoArgsConstructor;
+
 import java.util.List;
 
-
+@Data
+@NoArgsConstructor
+@AllArgsConstructor
 public class LevelResult {
-    private final int level;
-    private final List<TextEmbedding> embeddings;
-    private final List<Cluster> clusters;
-    private final List<ClusterSummary> summaries;
-
-    public LevelResult(int level, List<TextEmbedding> embeddings,
-                       List<Cluster> clusters, List<ClusterSummary> summaries) {
-        this.level = level;
-        this.embeddings = embeddings;
-        this.clusters = clusters;
-        this.summaries = summaries;
-    }
-
-    public int getLevel() { return level; }
-    public List<TextEmbedding> getEmbeddings() { return embeddings; }
-    public List<Cluster> getClusters() { return clusters; }
-    public List<ClusterSummary> getSummaries() { return summaries; }
+    private int level;
+    private List<TextEmbedding> embeddings;
+    private List<Cluster> clusters;
+    private List<ClusterSummary> summaries;
 }
