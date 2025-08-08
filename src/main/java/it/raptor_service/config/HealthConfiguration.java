@@ -23,7 +23,6 @@ public class HealthConfiguration {
         @Override
         public Health health() {
             try {
-                // Simple test prompt to check if Ollama chat is responding
                 String response = chatClient.prompt("Hello").call().content();
                 return Health.up()
                         .withDetail("service", "Ollama Chat")
