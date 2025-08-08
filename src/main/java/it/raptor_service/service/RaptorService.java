@@ -2,9 +2,12 @@ package it.raptor_service.service;
 
 import it.raptor_service.config.RaptorProperties;
 import it.raptor_service.model.*;
+import lombok.extern.slf4j.Slf4j;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.ai.chat.client.ChatClient;
+import org.springframework.ai.chat.messages.UserMessage;
+import org.springframework.ai.chat.model.ChatModel;
+import org.springframework.ai.chat.prompt.Prompt;
 import org.springframework.ai.chat.prompt.PromptTemplate;
 import org.springframework.ai.embedding.EmbeddingModel;
 import org.springframework.ai.embedding.EmbeddingRequest;
@@ -16,15 +19,17 @@ import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 
 @Service
+@Slf4j
 public class RaptorService {
 
-    private static final Logger log = LoggerFactory.getLogger(RaptorService.class);
-    
-    private final ChatClient chatClient;
+
+
+
     private final EmbeddingModel embeddingModel;
     private final ClusteringService clusteringService;
     private final TextSplitterService textSplitterService;
     private final RaptorProperties properties;
+    private final ChatModel chatModel;
 
     private static final String SUMMARY_TEMPLATE = """
         Here is a subset of documentation that needs to be summarized.
@@ -39,44 +44,45 @@ public class RaptorService {
         Summary:
         """;
 
-    public RaptorService(ChatClient chatClient,
+    public RaptorService(ChatModel chatModel,
                          EmbeddingModel embeddingModel,
                          ClusteringService clusteringService,
                          TextSplitterService textSplitterService,
                          RaptorProperties properties) {
-        this.chatClient = chatClient;
+
         this.embeddingModel = embeddingModel;
         this.clusteringService = clusteringService;
         this.textSplitterService = textSplitterService;
         this.properties = properties;
+        this.chatModel = chatModel;
     }
 
     public RaptorResult processText(String text, int chunkSize, int maxLevels) {
         log.info("Starting RAPTOR processing with chunkSize={}, maxLevels={}", chunkSize, maxLevels);
-        
+
         if (text == null || text.trim().isEmpty()) {
             throw new IllegalArgumentException("Text cannot be null or empty");
         }
 
         try {
             long startTime = System.currentTimeMillis();
-            
+
             // Step 1: Text splitting
             log.debug("Splitting text into chunks...");
             List<String> chunks = textSplitterService.splitText(text, chunkSize);
             log.info("Text split into {} chunks", chunks.size());
-            
+
             // Step 2: Recursive processing
             Map<Integer, LevelResult> results = recursiveProcess(chunks, 1, maxLevels);
-            
+
             // Step 3: Collect all texts
             List<String> allTexts = collectAllTexts(chunks, results);
-            
+
             long processingTime = System.currentTimeMillis() - startTime;
             log.info("RAPTOR processing completed in {}ms with {} levels", processingTime, results.size());
-            
+
             return new RaptorResult(results, allTexts);
-            
+
         } catch (Exception e) {
             log.error("Error during RAPTOR processing: {}", e.getMessage(), e);
             throw new RuntimeException("Failed to process text: " + e.getMessage(), e);
@@ -84,14 +90,14 @@ public class RaptorService {
     }
 
     public RaptorResult processText(String text) {
-        return processText(text, 
-                properties.getProcessing().getDefaultChunkSize(), 
+        return processText(text,
+                properties.getProcessing().getDefaultChunkSize(),
                 properties.getProcessing().getDefaultMaxLevels());
     }
 
     private Map<Integer, LevelResult> recursiveProcess(List<String> texts, int level, int maxLevels) {
         Map<Integer, LevelResult> results = new HashMap<>();
-        
+
         log.debug("Processing level {} with {} texts", level, texts.size());
 
         try {
@@ -107,7 +113,7 @@ public class RaptorService {
 
                 results.putAll(recursiveProcess(summaries, level + 1, maxLevels));
             }
-            
+
         } catch (Exception e) {
             log.error("Error processing level {}: {}", level, e.getMessage(), e);
             // Create a fallback result for this level
@@ -121,20 +127,20 @@ public class RaptorService {
     private LevelResult embedClusterSummarize(List<String> texts, int level) {
         log.debug("Generating embeddings for level {} with {} texts", level, texts.size());
         List<TextEmbedding> embeddings = generateEmbeddings(texts);
-        
+
         log.debug("Performing clustering for level {}", level);
         List<Cluster> clusters = clusteringService.performClustering(embeddings);
-        
+
         log.debug("Generating summaries for level {} with {} clusters", level, clusters.size());
         List<ClusterSummary> summaries = generateSummaries(clusters, level);
-        
+
         return new LevelResult(level, embeddings, clusters, summaries);
     }
 
     private List<TextEmbedding> generateEmbeddings(List<String> texts) {
         try {
             log.debug("Generating embeddings for {} texts", texts.size());
-            
+
             EmbeddingRequest request = new EmbeddingRequest(texts, null);
             EmbeddingResponse response = embeddingModel.call(request);
 
@@ -144,10 +150,10 @@ public class RaptorService {
                         return new TextEmbedding(i, texts.get(i), vector);
                     })
                     .collect(Collectors.toList());
-            
+
             log.debug("Successfully generated {} embeddings", embeddings.size());
             return embeddings;
-            
+
         } catch (Exception e) {
             log.error("Error generating embeddings: {}", e.getMessage(), e);
             throw new RuntimeException("Failed to generate embeddings: " + e.getMessage(), e);
@@ -156,7 +162,7 @@ public class RaptorService {
 
     private List<ClusterSummary> generateSummaries(List<Cluster> clusters, int level) {
         log.debug("Generating summaries for {} clusters at level {}", clusters.size(), level);
-        
+
         PromptTemplate promptTemplate = new PromptTemplate(SUMMARY_TEMPLATE);
 
         return clusters.stream()
@@ -166,7 +172,10 @@ public class RaptorService {
                         String prompt = promptTemplate.render(Map.of("context", context));
 
                         log.debug("Generating summary for cluster {} at level {}", cluster.getId(), level);
-                        String summary = chatClient.prompt(prompt).call().content();
+                        String summary = chatModel.call(new Prompt(new UserMessage(prompt)))
+                                .getResult()
+                                .getOutput()
+                                .getText();
                         
                         return new ClusterSummary(cluster.getId(), level, summary, cluster.getTextIds());
                         

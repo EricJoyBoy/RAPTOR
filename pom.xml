@@ -23,7 +23,7 @@
 	<properties>
 		<maven.compiler.source>21</maven.compiler.source>
 		<maven.compiler.target>21</maven.compiler.target>
-		<spring-ai.version>1.0.0-M6</spring-ai.version>
+		<spring-ai.version>1.0.0-M5</spring-ai.version>
 		<weka.version>3.8.6</weka.version>
 	</properties>
 
@@ -37,7 +37,7 @@
 		<dependency>
 			<groupId>org.springframework.ai</groupId>
 			<artifactId>spring-ai-client-chat</artifactId>
-			<version>1.0.1</version>
+			<version>1.0.0</version>
 		</dependency>
 
 		<dependency>
@@ -68,7 +68,7 @@
 		<dependency>
 			<groupId>org.springframework.ai</groupId>
 			<artifactId>spring-ai-vertex-ai-embedding-spring-boot-starter</artifactId>
-			<version>1.0.0-M6</version>
+			<version>1.0.0-M5</version>
 		</dependency>
 
 
