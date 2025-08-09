@@ -5,6 +5,7 @@ import it.raptor_service.config.RaptorProperties;
 import it.raptor_service.model.Cluster;
 import it.raptor_service.model.GlobalCluster;
 import it.raptor_service.model.TextEmbedding;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import weka.clusterers.EM;
 import weka.core.Attribute;
@@ -15,7 +16,7 @@ import weka.core.Instances;
 import java.util.*;
 import java.util.stream.Collectors;
 
-
+@Slf4j
 @Service
 public class ClusteringService {
 
@@ -58,7 +59,7 @@ public class ClusteringService {
             return allClusters;
 
         } catch (Exception e) {
-            System.err.println("Clustering failed, using single cluster: " + e.getMessage());
+            log.error("Clustering failed, using single cluster: " + e.getMessage());
             return Collections.singletonList(createSingleCluster(embeddings));
         }
     }
@@ -109,8 +110,8 @@ public class ClusteringService {
         if (embeddings.size() <= 2) {
             return Collections.singletonList(
                     new Cluster(startId,
-                            embeddings.stream().map(TextEmbedding::getText).collect(Collectors.toList()),
-                            embeddings.stream().map(TextEmbedding::getId).collect(Collectors.toList()))
+                            embeddings.stream().map(TextEmbedding::getText).toList(),
+                            embeddings.stream().map(TextEmbedding::getId).toList())
             );
         }
 
@@ -142,7 +143,7 @@ public class ClusteringService {
                     .collect(Collectors.toList());
 
         } catch (Exception e) {
-            System.err.println("Local clustering failed: " + e.getMessage());
+            log.error("Local clustering failed: " + e.getMessage());
             return Collections.singletonList(
                     new Cluster(startId,
                             embeddings.stream().map(TextEmbedding::getText).toList(),
