@@ -106,7 +106,7 @@ public class RaptorService {
             if (level < maxLevels && currentResult.getSummaries().size() > 1) {
                 List<String> summaries = currentResult.getSummaries().stream()
                         .map(ClusterSummary::getSummary)
-                        .collect(Collectors.toList());
+                        .toList();
 
                 results.putAll(recursiveProcess(summaries, level + 1, maxLevels));
             }
@@ -146,7 +146,7 @@ public class RaptorService {
                         float[] vector = response.getResults().get(i).getOutput();
                         return new TextEmbedding(i, texts.get(i), vector);
                     })
-                    .collect(Collectors.toList());
+                    .toList();
 
             log.debug("Successfully generated {} embeddings", embeddings.size());
             return embeddings;
@@ -185,7 +185,7 @@ public class RaptorService {
                         return new ClusterSummary(cluster.getId(), level, fallbackSummary, cluster.getTextIds());
                     }
                 })
-                .collect(Collectors.toList());
+                .toList();
     }
 
     private LevelResult createFallbackResult(List<String> texts, int level) {
@@ -194,7 +194,7 @@ public class RaptorService {
         // Create empty embeddings (will be null or empty arrays)
         List<TextEmbedding> fallbackEmbeddings = texts.stream()
                 .map(text -> new TextEmbedding(0, text, new float[0]))
-                .collect(Collectors.toList());
+                .toList();
         
         // Create a single cluster with all texts
         List<Cluster> fallbackClusters = List.of(new Cluster(0, texts, 
