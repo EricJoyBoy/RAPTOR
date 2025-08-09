@@ -3,14 +3,12 @@ package it.raptor_service.service;
 import it.raptor_service.config.RaptorProperties;
 import it.raptor_service.model.*;
 import lombok.extern.slf4j.Slf4j;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+
 import org.springframework.ai.chat.messages.UserMessage;
 import org.springframework.ai.chat.model.ChatModel;
 import org.springframework.ai.chat.prompt.Prompt;
 import org.springframework.ai.chat.prompt.PromptTemplate;
 import org.springframework.ai.embedding.EmbeddingModel;
-import org.springframework.ai.embedding.EmbeddingOptions;
 import org.springframework.ai.embedding.EmbeddingRequest;
 import org.springframework.ai.embedding.EmbeddingResponse;
 import org.springframework.ai.ollama.api.OllamaOptions;
@@ -23,9 +21,6 @@ import java.util.stream.IntStream;
 @Service
 @Slf4j
 public class RaptorService {
-
-
-
 
     private final EmbeddingModel embeddingModel;
     private final ClusteringService clusteringService;
