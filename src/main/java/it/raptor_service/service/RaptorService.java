@@ -215,7 +215,7 @@ public class RaptorService {
                 .forEach(entry -> {
                     List<String> summaries = entry.getValue().getSummaries().stream()
                             .map(ClusterSummary::getSummary)
-                            .collect(Collectors.toList());
+                            .toList();
                     allTexts.addAll(summaries);
                 });
 
