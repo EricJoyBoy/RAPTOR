@@ -20,7 +20,7 @@ This service provides a RESTful API for processing text using the RAPTOR algorit
 
 1.  Clone the repository:
     ```bash
-    git clone https://github.com/your-username/raptor-service.git
+    git clone https://github.com/EricJoyBoy/raptor-service.git
     ```
 2.  Navigate to the project directory:
     ```bash
