@@ -12,9 +12,12 @@ import org.springframework.ai.embedding.EmbeddingModel;
 import org.springframework.ai.embedding.EmbeddingRequest;
 import org.springframework.ai.embedding.EmbeddingResponse;
 import org.springframework.ai.ollama.api.OllamaOptions;
+import org.springframework.cache.annotation.Cacheable;
+import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 
 import java.util.*;
+import java.util.concurrent.CompletableFuture;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 
@@ -54,11 +57,13 @@ public class RaptorService {
         this.chatModel = chatModel;
     }
 
-    public RaptorResult processText(String text, int chunkSize, int maxLevels) {
-        log.info("Starting RAPTOR processing with chunkSize={}, maxLevels={}", chunkSize, maxLevels);
+    @Async("taskExecutor")
+    @Cacheable(cacheNames = "raptor-results", key = "{#text, #chunkSize, #maxLevels}")
+    public CompletableFuture<RaptorResult> processText(String text, int chunkSize, int maxLevels) {
+        log.info("Starting Asynchronous RAPTOR processing with chunkSize={}, maxLevels={}", chunkSize, maxLevels);
 
         if (text == null || text.trim().isEmpty()) {
-            throw new IllegalArgumentException("Text cannot be null or empty");
+            return CompletableFuture.failedFuture(new IllegalArgumentException("Text cannot be null or empty"));
         }
 
         try {
@@ -78,15 +83,16 @@ public class RaptorService {
             long processingTime = System.currentTimeMillis() - startTime;
             log.info("RAPTOR processing completed in {}ms with {} levels", processingTime, results.size());
 
-            return new RaptorResult(results, allTexts);
+            RaptorResult raptorResult = new RaptorResult(results, allTexts);
+            return CompletableFuture.completedFuture(raptorResult);
 
         } catch (Exception e) {
             log.error("Error during RAPTOR processing: {}", e.getMessage(), e);
-            throw new RuntimeException("Failed to process text: " + e.getMessage(), e);
+            return CompletableFuture.failedFuture(new RuntimeException("Failed to process text: " + e.getMessage(), e));
         }
     }
 
-    public RaptorResult processText(String text) {
+    public CompletableFuture<RaptorResult> processText(String text) {
         return processText(text,
                 properties.getProcessing().getDefaultChunkSize(),
                 properties.getProcessing().getDefaultMaxLevels());

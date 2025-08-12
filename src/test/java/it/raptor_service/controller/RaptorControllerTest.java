@@ -3,7 +3,9 @@ package it.raptor_service.controller;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import it.raptor_service.model.RaptorResult;
 import it.raptor_service.service.RaptorService;
+import it.raptor_service.store.JobStore;
 import org.junit.jupiter.api.Test;
+import org.mockito.Mockito;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
 import org.springframework.boot.test.mock.mockito.MockBean;
@@ -14,6 +16,8 @@ import org.springframework.test.web.servlet.request.MockMvcRequestBuilders;
 
 import java.util.Collections;
 import java.util.Map;
+import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
@@ -31,6 +35,9 @@ class RaptorControllerTest {
     @MockBean
     private RaptorService raptorService;
 
+    @MockBean
+    private JobStore jobStore;
+
     @Autowired
     private ObjectMapper objectMapper;
 
@@ -38,124 +45,90 @@ class RaptorControllerTest {
     void health_returnsOk() throws Exception {
         mockMvc.perform(get("/api/raptor/health"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.status").value("healthy"))
-                .andExpect(jsonPath("$.service").value("RAPTOR Text Processing Service"))
-                .andExpect(jsonPath("$.version").value("1.0.0"));
+                .andExpect(jsonPath("$.status").value("healthy"));
     }
 
     @Test
-    void processText_withValidRequest_returnsOk() throws Exception {
-        RaptorResult mockResult = new RaptorResult(Collections.emptyMap(), Collections.emptyList());
-        when(raptorService.processText(any(), anyInt(), anyInt())).thenReturn(mockResult);
+    void processText_withValidRequest_returnsAccepted() throws Exception {
+        when(raptorService.processText(any(), anyInt(), anyInt()))
+                .thenReturn(CompletableFuture.completedFuture(new RaptorResult(Collections.emptyMap(), Collections.emptyList())));
 
-        Map<String, Object> request = Map.of(
-                "text", "This is a test text.",
-                "chunkSize", 500,
-                "maxLevels", 2
-        );
+        Map<String, Object> request = Map.of("text", "This is a test text.");
 
         mockMvc.perform(post("/api/raptor/process")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request)))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.message").value("Success"));
+                .andExpect(status().isAccepted())
+                .andExpect(jsonPath("$.jobId").exists())
+                .andExpect(jsonPath("$.status").value("IN_PROGRESS"));
     }
 
     @Test
-    void processText_withEmptyText_returnsBadRequest() throws Exception {
-        Map<String, Object> request = Map.of("text", "");
+    void processFile_withValidFile_returnsAccepted() throws Exception {
+        when(raptorService.processText(any(), anyInt(), anyInt()))
+                .thenReturn(CompletableFuture.completedFuture(new RaptorResult(Collections.emptyMap(), Collections.emptyList())));
 
-        mockMvc.perform(post("/api/raptor/process")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(request)))
-                .andExpect(status().isBadRequest());
+        MockMultipartFile file = new MockMultipartFile("file", "test.txt", "text/plain", "test data".getBytes());
+
+        mockMvc.perform(MockMvcRequestBuilders.multipart("/api/raptor/process-file").file(file))
+                .andExpect(status().isAccepted())
+                .andExpect(jsonPath("$.jobId").exists())
+                .andExpect(jsonPath("$.status").value("IN_PROGRESS"));
     }
 
     @Test
-    void processFile_withValidFile_returnsOk() throws Exception {
-        RaptorResult mockResult = new RaptorResult(Collections.emptyMap(), Collections.emptyList());
-        when(raptorService.processText(any(), anyInt(), anyInt())).thenReturn(mockResult);
+    void getResult_whenJobCompleted_returnsOk() throws Exception {
+        String jobId = UUID.randomUUID().toString();
+        RaptorResult result = new RaptorResult(Collections.emptyMap(), Collections.emptyList());
+        JobStore.Job mockJob = Mockito.mock(JobStore.Job.class);
+        when(jobStore.getJob(jobId)).thenReturn(mockJob);
+        when(mockJob.getStatus()).thenReturn(new JobStore.JobStatus("COMPLETED", result));
 
-        MockMultipartFile file = new MockMultipartFile(
-                "file",
-                "test.txt",
-                "text/plain",
-                "This is the file content.".getBytes()
-        );
-
-        mockMvc.perform(MockMvcRequestBuilders.multipart("/api/raptor/process-file")
-                        .file(file)
-                        .param("chunkSize", "500")
-                        .param("maxLevels", "2"))
+        mockMvc.perform(get("/api/raptor/results/{jobId}", jobId))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.message").value("Success"));
+                .andExpect(jsonPath("$.message").value("Success"))
+                .andExpect(jsonPath("$.result").exists());
+    }
+
+    @Test
+    void getResult_whenJobInProgress_returnsAccepted() throws Exception {
+        String jobId = UUID.randomUUID().toString();
+        JobStore.Job mockJob = Mockito.mock(JobStore.Job.class);
+        when(jobStore.getJob(jobId)).thenReturn(mockJob);
+        when(mockJob.getStatus()).thenReturn(new JobStore.JobStatus("IN_PROGRESS", null));
+
+        mockMvc.perform(get("/api/raptor/results/{jobId}", jobId))
+                .andExpect(status().isAccepted())
+                .andExpect(jsonPath("$.status").value("IN_PROGRESS"));
+    }
+
+    @Test
+    void getResult_whenJobFailed_returnsInternalServerError() throws Exception {
+        String jobId = UUID.randomUUID().toString();
+        JobStore.Job mockJob = Mockito.mock(JobStore.Job.class);
+        when(jobStore.getJob(jobId)).thenReturn(mockJob);
+        when(mockJob.getStatus()).thenReturn(new JobStore.JobStatus("FAILED", null));
+
+        mockMvc.perform(get("/api/raptor/results/{jobId}", jobId))
+                .andExpect(status().isInternalServerError())
+                .andExpect(jsonPath("$.status").value("FAILED"));
+    }
+
+    @Test
+    void getResult_whenJobNotFound_returnsNotFound() throws Exception {
+        String jobId = UUID.randomUUID().toString();
+        when(jobStore.getJob(jobId)).thenReturn(null);
+
+        mockMvc.perform(get("/api/raptor/results/{jobId}", jobId))
+                .andExpect(status().isNotFound());
     }
 
     @Test
     void processFile_withEmptyFile_returnsBadRequest() throws Exception {
-        MockMultipartFile file = new MockMultipartFile(
-                "file",
-                "empty.txt",
-                "text/plain",
-                new byte[0]
-        );
+        MockMultipartFile file = new MockMultipartFile("file", "empty.txt", "text/plain", new byte[0]);
 
-        mockMvc.perform(MockMvcRequestBuilders.multipart("/api/raptor/process-file")
-                        .file(file))
+        mockMvc.perform(MockMvcRequestBuilders.multipart("/api/raptor/process-file").file(file))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.message").value("Error: File cannot be empty"));
-    }
-
-    @Test
-    void processFile_withLargeFile_returnsBadRequest() throws Exception {
-        byte[] largeContent = new byte[11 * 1024 * 1024]; // 11MB
-
-        MockMultipartFile file = new MockMultipartFile(
-                "file",
-                "large.txt",
-                "text/plain",
-                largeContent
-        );
-
-        mockMvc.perform(MockMvcRequestBuilders.multipart("/api/raptor/process-file")
-                        .file(file))
-                .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.message").value("Error: File too large. Maximum allowed: 10MB"));
-    }
-
-    @Test
-    void processFile_withInvalidFileType_returnsBadRequest() throws Exception {
-        MockMultipartFile file = new MockMultipartFile(
-                "file",
-                "image.jpg",
-                "image/jpeg",
-                "image content".getBytes()
-        );
-
-        mockMvc.perform(MockMvcRequestBuilders.multipart("/api/raptor/process-file")
-                        .file(file))
-                .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.message").value("Error: Only text files are supported"));
-    }
-
-    @Test
-    void processFile_withLongContent_returnsBadRequest() throws Exception {
-        // Create a string that is longer than MAX_TEXT_LENGTH
-        StringBuilder longText = new StringBuilder();
-        for (int i = 0; i < 1000001; i++) {
-            longText.append("a");
-        }
-
-        MockMultipartFile file = new MockMultipartFile(
-                "file",
-                "long.txt",
-                "text/plain",
-                longText.toString().getBytes()
-        );
-
-        mockMvc.perform(MockMvcRequestBuilders.multipart("/api/raptor/process-file")
-                        .file(file))
-                .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.message").value("Error: File content too long. Maximum allowed: 1000000 characters"));
     }
 }

@@ -1,26 +1,27 @@
 package it.raptor_service.controller;
 
 
+import it.raptor_service.model.JobSubmissionResponse;
 import it.raptor_service.model.ProcessResponse;
 import it.raptor_service.model.RaptorResult;
 import it.raptor_service.service.RaptorService;
-import it.raptor_service.service.validator.ValidRaptorRequest;
+import it.raptor_service.store.JobStore;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
-import jakarta.validation.constraints.Size;
 import lombok.Data;
 import lombok.extern.slf4j.Slf4j;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.io.IOException;
+import java.net.URI;
 import java.nio.charset.StandardCharsets;
 import java.util.Map;
+import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
 
 @RestController
 @RequestMapping("/api/raptor")
@@ -32,86 +33,99 @@ public class RaptorController {
     private static final int MAX_TEXT_LENGTH = 1000000;
 
     private final RaptorService raptorService;
+    private final JobStore jobStore;
 
-    public RaptorController(RaptorService raptorService) {
+    public RaptorController(RaptorService raptorService, JobStore jobStore) {
         this.raptorService = raptorService;
+        this.jobStore = jobStore;
     }
 
-    /**
-     * Process text using RAPTOR algorithm
-     */
     @PostMapping("/process")
-    public ResponseEntity<ProcessResponse> processText(@RequestBody @Valid ProcessRequest request) {
-        log.info("Processing text request with chunkSize={}, maxLevels={}", 
-                request.getChunkSize(), request.getMaxLevels());
-    
+    public ResponseEntity<JobSubmissionResponse> processText(@RequestBody @Valid ProcessRequest request) {
+        String jobId = UUID.randomUUID().toString();
+        log.info("Submitting job {} to process text with chunkSize={}, maxLevels={}",
+                jobId, request.getChunkSize(), request.getMaxLevels());
+
         try {
             int chunkSize = request.getChunkSize() != null ? request.getChunkSize() : 2000;
             int maxLevels = request.getMaxLevels() != null ? request.getMaxLevels() : 3;
 
-            RaptorResult result = raptorService.processText(request.getText(), chunkSize, maxLevels);
-            return ResponseEntity.ok(new ProcessResponse("Success", result));
-    
+            CompletableFuture<RaptorResult> future = raptorService.processText(request.getText(), chunkSize, maxLevels);
+            jobStore.storeJob(jobId, future);
+
+            URI location = URI.create("/api/raptor/results/" + jobId);
+            return ResponseEntity.accepted().location(location).body(new JobSubmissionResponse(jobId, "IN_PROGRESS", "Job submitted successfully."));
+
         } catch (Exception e) {
-            log.error("Error processing text: {}", e.getMessage(), e);
-            return ResponseEntity.internalServerError()
-                    .body(new ProcessResponse("Error processing text: " + e.getMessage(), null));
+            log.error("Error submitting job to process text: {}", e.getMessage(), e);
+            return ResponseEntity.internalServerError().body(new JobSubmissionResponse(null, "FAILED", "Error submitting job: " + e.getMessage()));
         }
     }
     
-    /**
-     * Process uploaded file using RAPTOR algorithm
-     */
     @PostMapping("/process-file")
-    public ResponseEntity<ProcessResponse> processFile(
+    public ResponseEntity<JobSubmissionResponse> processFile(
             @RequestParam("file") MultipartFile file,
             @RequestParam(value = "chunkSize", defaultValue = "2000") @Min(100) @Max(10000) int chunkSize,
             @RequestParam(value = "maxLevels", defaultValue = "3") @Min(1) @Max(10) int maxLevels) {
 
-        log.info("Processing file: {} ({} bytes) with chunkSize={}, maxLevels={}", 
-                file.getOriginalFilename(), file.getSize(), chunkSize, maxLevels);
+        String jobId = UUID.randomUUID().toString();
+        log.info("Submitting job {} to process file: {} ({} bytes) with chunkSize={}, maxLevels={}",
+                jobId, file.getOriginalFilename(), file.getSize(), chunkSize, maxLevels);
 
         try {
-            // Validate file
             if (file.isEmpty()) {
-                return ResponseEntity.badRequest()
-                        .body(new ProcessResponse("Error: File cannot be empty", null));
+                return ResponseEntity.badRequest().body(new JobSubmissionResponse(null, "FAILED", "Error: File cannot be empty"));
             }
-
-            // Check file size
             if (file.getSize() > MAX_FILE_SIZE_MB * 1024 * 1024) {
-                return ResponseEntity.badRequest()
-                        .body(new ProcessResponse("Error: File too large. Maximum allowed: " + MAX_FILE_SIZE_MB + "MB", null));
+                return ResponseEntity.badRequest().body(new JobSubmissionResponse(null, "FAILED", "Error: File too large. Maximum allowed: " + MAX_FILE_SIZE_MB + "MB"));
             }
-
-            // Validate file type
             String contentType = file.getContentType();
             if (contentType == null || !contentType.startsWith("text/")) {
-                return ResponseEntity.badRequest()
-                        .body(new ProcessResponse("Error: Only text files are supported", null));
+                 return ResponseEntity.badRequest().body(new JobSubmissionResponse(null, "FAILED", "Error: Only text files are supported"));
             }
-
             String text = new String(file.getBytes(), StandardCharsets.UTF_8);
-            
-            // Validate text length
             if (text.length() > MAX_TEXT_LENGTH) {
-                return ResponseEntity.badRequest()
-                        .body(new ProcessResponse("Error: File content too long. Maximum allowed: " + MAX_TEXT_LENGTH + " characters", null));
+                return ResponseEntity.badRequest().body(new JobSubmissionResponse(null, "FAILED", "Error: File content too long. Maximum allowed: " + MAX_TEXT_LENGTH + " characters"));
             }
 
-            RaptorResult result = raptorService.processText(text, chunkSize, maxLevels);
-            log.info("Successfully processed file with {} levels", result.getLevelResults().size());
+            CompletableFuture<RaptorResult> future = raptorService.processText(text, chunkSize, maxLevels);
+            jobStore.storeJob(jobId, future);
 
-            return ResponseEntity.ok(new ProcessResponse("Success", result));
+            URI location = URI.create("/api/raptor/results/" + jobId);
+            return ResponseEntity.accepted().location(location).body(new JobSubmissionResponse(jobId, "IN_PROGRESS", "Job submitted successfully."));
 
         } catch (IOException e) {
             log.error("Error reading file: {}", e.getMessage(), e);
-            return ResponseEntity.internalServerError()
-                    .body(new ProcessResponse("Error reading file: " + e.getMessage(), null));
+            return ResponseEntity.internalServerError().body(new JobSubmissionResponse(null, "FAILED", "Error reading file: " + e.getMessage()));
         } catch (Exception e) {
             log.error("Error processing file: {}", e.getMessage(), e);
-            return ResponseEntity.internalServerError()
-                    .body(new ProcessResponse("Error processing file: " + e.getMessage(), null));
+            return ResponseEntity.internalServerError().body(new JobSubmissionResponse(null, "FAILED", "Error processing file: " + e.getMessage()));
+        }
+    }
+
+    @GetMapping("/results/{jobId}")
+    public ResponseEntity<?> getResult(@PathVariable String jobId) {
+        log.debug("Checking result for job {}", jobId);
+        JobStore.Job job = jobStore.getJob(jobId);
+        if (job == null) {
+            return ResponseEntity.notFound().build();
+        }
+
+        JobStore.JobStatus status = job.getStatus();
+        switch (status.status()) {
+            case "COMPLETED":
+                log.info("Job {} completed successfully.", jobId);
+                return ResponseEntity.ok(new ProcessResponse("Success", status.result()));
+            case "IN_PROGRESS":
+                log.debug("Job {} is still in progress.", jobId);
+                URI location = URI.create("/api/raptor/results/" + jobId);
+                return ResponseEntity.accepted().location(location).body(Map.of("status", "IN_PROGRESS"));
+            case "FAILED":
+                log.error("Job {} failed to process.", jobId);
+                return ResponseEntity.status(500).body(Map.of("status", "FAILED", "message", "Job failed to process. Check logs for details."));
+            default:
+                log.warn("Job {} has an unknown status.", jobId);
+                return ResponseEntity.status(500).body(Map.of("status", "UNKNOWN"));
         }
     }
 
@@ -127,7 +141,6 @@ public class RaptorController {
         ));
     }
 
-    @ValidRaptorRequest
     @Data
     public static class ProcessRequest {
         @NotBlank(message = "Text cannot be empty")
