@@ -1,79 +1,151 @@
 package it.raptor_service.service;
 
-
-
+import lombok.Getter;
 import org.springframework.stereotype.Service;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 import java.util.regex.Pattern;
 
 @Service
 public class TextSplitterService {
 
-    private static final String[] SEPARATORS = {"\n\n", "\n", " ", ""};
-    private static final Pattern SENTENCE_PATTERN = Pattern.compile("[.!?]+\\s*");
+    // Hierarchical separators - from most semantic to least
+    private static final List<String> SEPARATORS = Arrays.asList(
+            "\n\n",    // Paragraph breaks
+            "\n",      // Line breaks
+            ". ",      // Sentence endings with space
+            "! ",      // Exclamation with space
+            "? ",      // Question with space
+            "; ",      // Semicolon
+            ", ",      // Comma
+            " ",       // Word boundaries
+            ""         // Character level (fallback)
+    );
+
+    private static final Pattern SENTENCE_PATTERN = Pattern.compile("(?<=[.!?])\\s+");
+    private static final double CHARS_PER_TOKEN_ESTIMATE = 4.0;
+    private static final double OVERLAP_RATIO = 0.1; // 10% overlap between chunks
 
     /**
-     * Split text into chunks of approximately the specified size
+     * Configuration for text splitting
      */
-    public List<String> splitText(String text, int chunkSize) {
-        if (text == null || text.trim().isEmpty()) {
-            throw new IllegalArgumentException("Text cannot be null or empty");
+    @Getter
+    public static class SplitConfig {
+        private final int chunkSize;
+        private final int overlapSize;
+        private final boolean preserveSentences;
+        private final boolean addOverlap;
+
+        public SplitConfig(int chunkSize) {
+            this(chunkSize, (int) (chunkSize * OVERLAP_RATIO), true, true);
         }
 
-        return recursiveSplit(text, chunkSize, 0);
+        public SplitConfig(int chunkSize, int overlapSize, boolean preserveSentences, boolean addOverlap) {
+            this.chunkSize = chunkSize;
+            this.overlapSize = overlapSize;
+            this.preserveSentences = preserveSentences;
+            this.addOverlap = addOverlap;
+        }
+
     }
 
     /**
-     * Recursively split text using different separators
+     * Split text into chunks with default configuration
      */
-    private List<String> recursiveSplit(String text, int chunkSize, int separatorIndex) {
-        List<String> result = new ArrayList<>();
+    public List<String> splitText(String text, int chunkSize) {
+        return splitText(text, new SplitConfig(chunkSize));
+    }
 
-        if (text.length() <= chunkSize) {
-            if (!text.trim().isEmpty()) {
-                result.add(text.trim());
+    /**
+     * Split text into chunks with custom configuration
+     */
+    public List<String> splitText(String text, SplitConfig config) {
+        validateInput(text);
+
+        if (estimateTokenCount(text) <= config.getChunkSize()) {
+            return Arrays.asList(text.trim());
+        }
+
+        List<String> chunks = config.isPreserveSentences()
+                ? splitPreservingSentences(text, config)
+                : splitRecursively(text, config.getChunkSize(), 0);
+
+        return config.isAddOverlap() ? addOverlapToChunks(chunks, config) : chunks;
+    }
+
+    /**
+     * Split text while trying to preserve sentence boundaries
+     */
+    private List<String> splitPreservingSentences(String text, SplitConfig config) {
+        List<String> sentences = splitIntoSentences(text);
+        if (sentences.isEmpty()) {
+            return splitRecursively(text, config.getChunkSize(), 0);
+        }
+
+        return groupSentencesIntoChunks(sentences, config.getChunkSize());
+    }
+
+    /**
+     * Recursively split text using hierarchical separators
+     */
+    private List<String> splitRecursively(String text, int chunkSize, int separatorIndex) {
+        List<String> result = new ArrayList<>();
+        String trimmedText = text.trim();
+
+        if (estimateTokenCount(trimmedText) <= chunkSize) {
+            if (!trimmedText.isEmpty()) {
+                result.add(trimmedText);
             }
             return result;
         }
 
-        if (separatorIndex >= SEPARATORS.length) {
-            // If we've exhausted all separators, split by character count
-            return splitByCharacterCount(text, chunkSize);
+        if (separatorIndex >= SEPARATORS.size()) {
+            return splitByCharacterCount(trimmedText, chunkSize);
         }
 
-        String separator = SEPARATORS[separatorIndex];
-        String[] parts = text.split(Pattern.quote(separator), -1);
+        String separator = SEPARATORS.get(separatorIndex);
 
-        if (parts.length == 1) {
-            // Current separator didn't split the text, try next separator
-            return recursiveSplit(text, chunkSize, separatorIndex + 1);
+        // Special handling for empty separator (character-level splitting)
+        if (separator.isEmpty()) {
+            return splitByCharacterCount(trimmedText, chunkSize);
         }
 
+        String[] parts = trimmedText.split(Pattern.quote(separator), -1);
+
+        if (parts.length <= 1) {
+            return splitRecursively(trimmedText, chunkSize, separatorIndex + 1);
+        }
+
+        return mergeParts(parts, separator, chunkSize, separatorIndex);
+    }
+
+    /**
+     * Merge parts while respecting chunk size limits
+     */
+    private List<String> mergeParts(String[] parts, String separator, int chunkSize, int separatorIndex) {
+        List<String> result = new ArrayList<>();
         StringBuilder currentChunk = new StringBuilder();
 
         for (String part : parts) {
-            String testChunk = currentChunk.length() == 0 ?
-                    part : currentChunk + separator + part;
+            if (part.trim().isEmpty()) continue;
+
+            String testChunk = buildTestChunk(currentChunk.toString(), part, separator);
 
             if (estimateTokenCount(testChunk) <= chunkSize) {
-                if (currentChunk.length() > 0) {
-                    currentChunk.append(separator);
-                }
-                currentChunk.append(part);
+                updateCurrentChunk(currentChunk, part, separator);
             } else {
-                // Current chunk is full
+                // Finalize current chunk if it has content
                 if (currentChunk.length() > 0) {
                     result.add(currentChunk.toString().trim());
-                    currentChunk = new StringBuilder();
+                    currentChunk.setLength(0);
                 }
 
                 // Handle the current part
                 if (estimateTokenCount(part) <= chunkSize) {
                     currentChunk.append(part);
                 } else {
-                    // Part is too large, split it further
-                    result.addAll(recursiveSplit(part, chunkSize, separatorIndex + 1));
+                    result.addAll(splitRecursively(part, chunkSize, separatorIndex + 1));
                 }
             }
         }
@@ -86,16 +158,44 @@ public class TextSplitterService {
     }
 
     /**
-     * Split text by character count when other methods fail
+     * Build test chunk to check size
+     */
+    private String buildTestChunk(String current, String part, String separator) {
+        if (current.isEmpty()) {
+            return part;
+        }
+        return current + separator + part;
+    }
+
+    /**
+     * Update current chunk with new part
+     */
+    private void updateCurrentChunk(StringBuilder currentChunk, String part, String separator) {
+        if (currentChunk.length() > 0) {
+            currentChunk.append(separator);
+        }
+        currentChunk.append(part);
+    }
+
+    /**
+     * Split text by character count as fallback
      */
     private List<String> splitByCharacterCount(String text, int chunkSize) {
         List<String> result = new ArrayList<>();
-        int approxCharSize = chunkSize * 4; // Rough estimate: 1 token ≈ 4 characters
+        int approxCharSize = (int) (chunkSize * CHARS_PER_TOKEN_ESTIMATE);
 
         for (int i = 0; i < text.length(); i += approxCharSize) {
             int end = Math.min(i + approxCharSize, text.length());
-            String chunk = text.substring(i, end).trim();
 
+            // Try to break at word boundary if possible
+            if (end < text.length() && !Character.isWhitespace(text.charAt(end))) {
+                int lastSpace = text.lastIndexOf(' ', end);
+                if (lastSpace > i + approxCharSize / 2) { // Don't make chunks too small
+                    end = lastSpace;
+                }
+            }
+
+            String chunk = text.substring(i, end).trim();
             if (!chunk.isEmpty()) {
                 result.add(chunk);
             }
@@ -105,28 +205,117 @@ public class TextSplitterService {
     }
 
     /**
-     * Estimate token count (rough approximation)
-     * In a real implementation, you might use a proper tokenizer
+     * Add overlap between chunks for better context continuity
+     */
+    private List<String> addOverlapToChunks(List<String> chunks, SplitConfig config) {
+        if (chunks.size() <= 1 || config.getOverlapSize() <= 0) {
+            return chunks;
+        }
+
+        List<String> overlappedChunks = new ArrayList<>();
+        overlappedChunks.add(chunks.get(0)); // First chunk unchanged
+
+        for (int i = 1; i < chunks.size(); i++) {
+            String previousChunk = chunks.get(i - 1);
+            String currentChunk = chunks.get(i);
+
+            String overlap = extractOverlap(previousChunk, config.getOverlapSize());
+            if (!overlap.isEmpty()) {
+                currentChunk = overlap + " " + currentChunk;
+
+                // Ensure the chunk with overlap doesn't exceed size limit
+                if (estimateTokenCount(currentChunk) > config.getChunkSize()) {
+                    // Reduce overlap if necessary
+                    int maxOverlapTokens = config.getChunkSize() - estimateTokenCount(chunks.get(i));
+                    if (maxOverlapTokens > 0) {
+                        overlap = truncateToTokenLimit(overlap, maxOverlapTokens);
+                        currentChunk = overlap + " " + chunks.get(i);
+                    } else {
+                        currentChunk = chunks.get(i); // No overlap possible
+                    }
+                }
+            }
+
+            overlappedChunks.add(currentChunk);
+        }
+
+        return overlappedChunks;
+    }
+
+    /**
+     * Extract overlap text from the end of a chunk
+     */
+    private String extractOverlap(String text, int overlapTokens) {
+        if (estimateTokenCount(text) <= overlapTokens) {
+            return text;
+        }
+
+        // Try to break at sentence boundary
+        String[] sentences = SENTENCE_PATTERN.split(text);
+        if (sentences.length > 1) {
+            StringBuilder overlap = new StringBuilder();
+            for (int i = sentences.length - 1; i >= 0; i--) {
+                String testOverlap = sentences[i] + (overlap.length() > 0 ? " " + overlap : "");
+                if (estimateTokenCount(testOverlap) <= overlapTokens) {
+                    overlap.insert(0, sentences[i] + (overlap.length() > 0 ? " " : ""));
+                } else {
+                    break;
+                }
+            }
+            if (overlap.length() > 0) {
+                return overlap.toString().trim();
+            }
+        }
+
+        // Fallback: character-based truncation
+        return truncateToTokenLimit(text, overlapTokens);
+    }
+
+    /**
+     * Truncate text to fit within token limit
+     */
+    private String truncateToTokenLimit(String text, int tokenLimit) {
+        if (estimateTokenCount(text) <= tokenLimit) {
+            return text;
+        }
+
+        int approxCharLimit = (int) (tokenLimit * CHARS_PER_TOKEN_ESTIMATE);
+        if (text.length() <= approxCharLimit) {
+            return text;
+        }
+
+        // Try to break at word boundary
+        int lastSpace = text.lastIndexOf(' ', approxCharLimit);
+        int cutPoint = (lastSpace > approxCharLimit / 2) ? lastSpace : approxCharLimit;
+
+        return text.substring(Math.max(0, text.length() - cutPoint)).trim();
+    }
+
+    /**
+     * Improved token count estimation
      */
     private int estimateTokenCount(String text) {
         if (text == null || text.trim().isEmpty()) {
             return 0;
         }
 
-        // Simple heuristic: average 4 characters per token
-        // This is a rough approximation - for production use a proper tokenizer
-        return Math.max(1, text.length() / 4);
+        String normalized = text.replaceAll("\\s+", " ").trim();
+        double baseCount = normalized.length() / CHARS_PER_TOKEN_ESTIMATE;
+
+        long punctuationCount = normalized.chars()
+                .filter(ch -> !Character.isLetterOrDigit(ch) && !Character.isWhitespace(ch))
+                .count();
+
+        return Math.max(1, (int) Math.ceil(baseCount + punctuationCount * 0.3));
     }
 
     /**
-     * Split text into sentences (alternative approach)
+     * Split text into sentences with improved regex
      */
     public List<String> splitIntoSentences(String text) {
-        if (text == null || text.trim().isEmpty()) {
-            return new ArrayList<>();
-        }
+        validateInput(text);
 
-        String[] sentences = SENTENCE_PATTERN.split(text);
+        String[] sentences = SENTENCE_PATTERN.split(text.trim());
         List<String> result = new ArrayList<>();
 
         for (String sentence : sentences) {
@@ -140,10 +329,13 @@ public class TextSplitterService {
     }
 
     /**
-     * Group sentences into chunks of approximately the specified size
+     * Group sentences into chunks with better size management
      */
-    public List<String> groupSentencesIntoChunks(String text, int chunkSize) {
-        List<String> sentences = splitIntoSentences(text);
+    private List<String> groupSentencesIntoChunks(List<String> sentences, int chunkSize) {
+        if (sentences.isEmpty()) {
+            return new ArrayList<>();
+        }
+
         List<String> chunks = new ArrayList<>();
         StringBuilder currentChunk = new StringBuilder();
 
@@ -159,10 +351,14 @@ public class TextSplitterService {
             } else {
                 if (currentChunk.length() > 0) {
                     chunks.add(currentChunk.toString());
-                    currentChunk = new StringBuilder(sentence);
+                    currentChunk = new StringBuilder();
+                }
+
+                // Handle sentence that's larger than chunk size
+                if (estimateTokenCount(sentence) > chunkSize) {
+                    chunks.addAll(splitRecursively(sentence, chunkSize, 0));
                 } else {
-                    // Single sentence is larger than chunk size
-                    chunks.add(sentence);
+                    currentChunk.append(sentence);
                 }
             }
         }
@@ -173,4 +369,41 @@ public class TextSplitterService {
 
         return chunks;
     }
+
+    /**
+     * Validate input text
+     */
+    private void validateInput(String text) {
+        if (text == null || text.trim().isEmpty()) {
+            throw new IllegalArgumentException("Text cannot be null or empty");
+        }
+    }
+
+    /**
+     * Get chunk statistics for debugging/monitoring
+     */
+    public ChunkStats getChunkStats(List<String> chunks) {
+        if (chunks.isEmpty()) {
+            return new ChunkStats(0, 0, 0, 0);
+        }
+
+        int totalTokens = chunks.stream().mapToInt(this::estimateTokenCount).sum();
+        int minTokens = chunks.stream().mapToInt(this::estimateTokenCount).min().orElse(0);
+        int maxTokens = chunks.stream().mapToInt(this::estimateTokenCount).max().orElse(0);
+        double avgTokens = (double) totalTokens / chunks.size();
+
+        return new ChunkStats(chunks.size(), avgTokens, minTokens, maxTokens);
+    }
+
+    /**
+         * Statistics about chunk distribution
+     */
+
+        public record ChunkStats(int chunkCount, double averageTokens, int minTokens, int maxTokens) {
+        @Override
+            public String toString() {
+                return String.format("ChunkStats{count=%d, avg=%.1f, min=%d, max=%d}",
+                        chunkCount, averageTokens, minTokens, maxTokens);
+            }
+        }
 }
