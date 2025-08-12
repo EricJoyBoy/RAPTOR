@@ -1,11 +1,13 @@
 package it.raptor_service.controller;
 
 
+import it.raptor_service.model.JobState;
 import it.raptor_service.model.JobSubmissionResponse;
 import it.raptor_service.model.ProcessResponse;
 import it.raptor_service.model.RaptorResult;
 import it.raptor_service.service.RaptorService;
 import it.raptor_service.store.JobStore;
+import it.raptor_service.validator.FileValidator;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
@@ -29,15 +31,15 @@ import java.util.concurrent.CompletableFuture;
 @Slf4j
 public class RaptorController {
 
-    private static final int MAX_FILE_SIZE_MB = 10;
-    private static final int MAX_TEXT_LENGTH = 1000000;
 
     private final RaptorService raptorService;
     private final JobStore jobStore;
+    private final FileValidator fileValidator;
 
-    public RaptorController(RaptorService raptorService, JobStore jobStore) {
+    public RaptorController(RaptorService raptorService, JobStore jobStore, FileValidator fileValidator) {
         this.raptorService = raptorService;
         this.jobStore = jobStore;
+        this.fileValidator = fileValidator;
     }
 
     @PostMapping("/process")
@@ -72,35 +74,12 @@ public class RaptorController {
         log.info("Submitting job {} to process file: {} ({} bytes) with chunkSize={}, maxLevels={}",
                 jobId, file.getOriginalFilename(), file.getSize(), chunkSize, maxLevels);
 
-        try {
-            if (file.isEmpty()) {
-                return ResponseEntity.badRequest().body(new JobSubmissionResponse(null, "FAILED", "Error: File cannot be empty"));
-            }
-            if (file.getSize() > MAX_FILE_SIZE_MB * 1024 * 1024) {
-                return ResponseEntity.badRequest().body(new JobSubmissionResponse(null, "FAILED", "Error: File too large. Maximum allowed: " + MAX_FILE_SIZE_MB + "MB"));
-            }
-            String contentType = file.getContentType();
-            if (contentType == null || !contentType.startsWith("text/")) {
-                 return ResponseEntity.badRequest().body(new JobSubmissionResponse(null, "FAILED", "Error: Only text files are supported"));
-            }
-            String text = new String(file.getBytes(), StandardCharsets.UTF_8);
-            if (text.length() > MAX_TEXT_LENGTH) {
-                return ResponseEntity.badRequest().body(new JobSubmissionResponse(null, "FAILED", "Error: File content too long. Maximum allowed: " + MAX_TEXT_LENGTH + " characters"));
-            }
+        String text = fileValidator.validateAndRead(file);
+        CompletableFuture<RaptorResult> future = raptorService.processText(text, chunkSize, maxLevels);
+        jobStore.storeJob(jobId, future);
 
-            CompletableFuture<RaptorResult> future = raptorService.processText(text, chunkSize, maxLevels);
-            jobStore.storeJob(jobId, future);
-
-            URI location = URI.create("/api/raptor/results/" + jobId);
-            return ResponseEntity.accepted().location(location).body(new JobSubmissionResponse(jobId, "IN_PROGRESS", "Job submitted successfully."));
-
-        } catch (IOException e) {
-            log.error("Error reading file: {}", e.getMessage(), e);
-            return ResponseEntity.internalServerError().body(new JobSubmissionResponse(null, "FAILED", "Error reading file: " + e.getMessage()));
-        } catch (Exception e) {
-            log.error("Error processing file: {}", e.getMessage(), e);
-            return ResponseEntity.internalServerError().body(new JobSubmissionResponse(null, "FAILED", "Error processing file: " + e.getMessage()));
-        }
+        URI location = URI.create("/api/raptor/results/" + jobId);
+        return ResponseEntity.accepted().location(location).body(new JobSubmissionResponse(jobId, "IN_PROGRESS", "Job submitted successfully."));
     }
 
     @GetMapping("/results/{jobId}")
@@ -111,18 +90,18 @@ public class RaptorController {
             return ResponseEntity.notFound().build();
         }
 
-        JobStore.JobStatus status = job.getStatus();
-        switch (status.status()) {
-            case "COMPLETED":
+        JobStore.JobStatus jobStatus = job.getStatus();
+        switch (jobStatus.state()) {
+            case COMPLETED:
                 log.info("Job {} completed successfully.", jobId);
-                return ResponseEntity.ok(new ProcessResponse("Success", status.result()));
-            case "IN_PROGRESS":
+                return ResponseEntity.ok(new ProcessResponse("Success", jobStatus.result()));
+            case IN_PROGRESS:
                 log.debug("Job {} is still in progress.", jobId);
                 URI location = URI.create("/api/raptor/results/" + jobId);
-                return ResponseEntity.accepted().location(location).body(Map.of("status", "IN_PROGRESS"));
-            case "FAILED":
+                return ResponseEntity.accepted().location(location).body(Map.of("status", jobStatus.state().name()));
+            case FAILED:
                 log.error("Job {} failed to process.", jobId);
-                return ResponseEntity.status(500).body(Map.of("status", "FAILED", "message", "Job failed to process. Check logs for details."));
+                return ResponseEntity.status(500).body(Map.of("status", jobStatus.state().name(), "message", "Job failed to process. Check logs for details."));
             default:
                 log.warn("Job {} has an unknown status.", jobId);
                 return ResponseEntity.status(500).body(Map.of("status", "UNKNOWN"));

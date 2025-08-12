@@ -1,5 +1,6 @@
 package it.raptor_service.store;
 
+import it.raptor_service.model.JobState;
 import it.raptor_service.model.RaptorResult;
 import org.springframework.stereotype.Component;
 
@@ -30,20 +31,20 @@ public class JobStore {
         public JobStatus getStatus() {
             if (future.isDone()) {
                 if (future.isCompletedExceptionally()) {
-                    return new JobStatus("FAILED", null);
+                    return new JobStatus(JobState.FAILED, null);
                 } else {
                     try {
-                        return new JobStatus("COMPLETED", future.get());
+                        return new JobStatus(JobState.COMPLETED, future.get());
                     } catch (Exception e) {
-                        return new JobStatus("FAILED", null);
+                        return new JobStatus(JobState.FAILED, null);
                     }
                 }
             } else {
-                return new JobStatus("IN_PROGRESS", null);
+                return new JobStatus(JobState.IN_PROGRESS, null);
             }
         }
     }
 
-    public record JobStatus(String status, RaptorResult result) {
+    public record JobStatus(JobState state, RaptorResult result) {
     }
 }
