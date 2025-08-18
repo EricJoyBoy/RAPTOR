@@ -3,6 +3,7 @@ package it.raptor_service.controller;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import it.raptor_service.model.RaptorResult;
 import it.raptor_service.service.RaptorService;
+import it.raptor_service.service.validator.RaptorControllerValidator;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
@@ -30,6 +31,9 @@ class RaptorControllerTest {
 
     @MockBean
     private RaptorService raptorService;
+
+    @MockBean
+    private RaptorControllerValidator raptorControllerValidator;
 
     @Autowired
     private ObjectMapper objectMapper;

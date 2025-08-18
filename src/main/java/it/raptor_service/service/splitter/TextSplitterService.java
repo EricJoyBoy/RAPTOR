@@ -51,18 +51,23 @@ public class TextSplitterService {
         StringBuilder currentChunk = new StringBuilder();
 
         for (String sentence : sentences) {
-            if (tokenEstimator.estimateTokenCount(sentence) > chunkSize) {
+            int sentenceTokens = tokenEstimator.estimateTokenCount(sentence);
+            if (sentenceTokens > chunkSize) {
                 chunks.addAll(splitRecursively(sentence, chunkSize, 0));
                 continue;
             }
-            if (currentChunk.length() > 0 && tokenEstimator.estimateTokenCount(currentChunk + " " + sentence) > chunkSize) {
+            if (currentChunk.length() == 0) {
+                currentChunk.append(sentence);
+                continue;
+            }
+
+            String combined = currentChunk.toString() + " " + sentence;
+            if (tokenEstimator.estimateTokenCount(combined) > chunkSize) {
                 chunks.add(currentChunk.toString());
-                currentChunk = new StringBuilder();
+                currentChunk = new StringBuilder(sentence);
+            } else {
+                currentChunk.append(" ").append(sentence);
             }
-            if (currentChunk.length() > 0) {
-                currentChunk.append(" ");
-            }
-            currentChunk.append(sentence);
         }
         if (currentChunk.length() > 0) {
             chunks.add(currentChunk.toString());
@@ -81,18 +86,27 @@ public class TextSplitterService {
         StringBuilder currentChunk = new StringBuilder();
 
         for (String part : parts) {
-            if (tokenEstimator.estimateTokenCount(part) > chunkSize) {
+            if (part.isEmpty()) {
+                continue;
+            }
+
+            int partTokens = tokenEstimator.estimateTokenCount(part);
+            if (partTokens > chunkSize) {
                 result.addAll(splitRecursively(part, chunkSize, separatorIndex + 1));
                 continue;
             }
-            if (currentChunk.length() > 0 && tokenEstimator.estimateTokenCount(currentChunk + separator + part) > chunkSize) {
+            if (currentChunk.length() == 0) {
+                currentChunk.append(part);
+                continue;
+            }
+
+            String combined = currentChunk.toString() + separator + part;
+            if (tokenEstimator.estimateTokenCount(combined) > chunkSize) {
                 result.add(currentChunk.toString());
-                currentChunk = new StringBuilder();
+                currentChunk = new StringBuilder(part);
+            } else {
+                currentChunk.append(separator).append(part);
             }
-            if (currentChunk.length() > 0) {
-                currentChunk.append(separator);
-            }
-            currentChunk.append(part);
         }
 
         if (currentChunk.length() > 0) {
@@ -111,7 +125,7 @@ public class TextSplitterService {
     }
 
     private List<String> addOverlapToChunks(List<String> chunks, SplitConfig config) {
-        if (chunks.size() <= 1) return chunks;
+        if (chunks.size() <= 1 || config.getOverlapSize() <= 0) return chunks;
 
         List<String> overlappedChunks = new ArrayList<>();
         overlappedChunks.add(chunks.get(0));
@@ -120,7 +134,7 @@ public class TextSplitterService {
             String prev = chunks.get(i - 1);
             String curr = chunks.get(i);
             String overlap = extractOverlap(prev, config.getOverlapSize());
-            overlappedChunks.add(overlap + " " + curr);
+            overlappedChunks.add(overlap.isEmpty() ? curr : (overlap + " " + curr));
         }
         return overlappedChunks;
     }
@@ -165,12 +179,19 @@ public class TextSplitterService {
         if (chunks.isEmpty()) {
             return new ChunkStats(0, 0, 0, 0);
         }
-        int totalTokens = chunks.stream().mapToInt(tokenEstimator::estimateTokenCount).sum();
+        List<Integer> tokenCounts = new ArrayList<>(chunks.size());
+        for (String chunk : chunks) {
+            tokenCounts.add(tokenEstimator.estimateTokenCount(chunk));
+        }
+        int totalTokens = tokenCounts.stream().mapToInt(Integer::intValue).sum();
+        int minTokens = tokenCounts.stream().mapToInt(Integer::intValue).min().orElse(0);
+        int maxTokens = tokenCounts.stream().mapToInt(Integer::intValue).max().orElse(0);
+
         return new ChunkStats(
                 chunks.size(),
                 (double) totalTokens / chunks.size(),
-                chunks.stream().mapToInt(tokenEstimator::estimateTokenCount).min().orElse(0),
-                chunks.stream().mapToInt(tokenEstimator::estimateTokenCount).max().orElse(0)
+                minTokens,
+                maxTokens
         );
     }
 }

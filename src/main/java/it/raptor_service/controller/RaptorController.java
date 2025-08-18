@@ -4,16 +4,16 @@ package it.raptor_service.controller;
 import it.raptor_service.model.ProcessResponse;
 import it.raptor_service.model.RaptorResult;
 import it.raptor_service.service.RaptorService;
+import it.raptor_service.service.validator.RaptorControllerValidator;
 import it.raptor_service.service.validator.ValidRaptorRequest;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
-import jakarta.validation.constraints.Size;
+
 import lombok.Data;
 import lombok.extern.slf4j.Slf4j;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
@@ -32,9 +32,11 @@ public class RaptorController {
     private static final int MAX_TEXT_LENGTH = 1000000;
 
     private final RaptorService raptorService;
+    private final RaptorControllerValidator raptorControllerValidator;
 
-    public RaptorController(RaptorService raptorService) {
+    public RaptorController(RaptorService raptorService, RaptorControllerValidator raptorControllerValidator) {
         this.raptorService = raptorService;
+        this.raptorControllerValidator = raptorControllerValidator;
     }
 
     /**
@@ -72,31 +74,16 @@ public class RaptorController {
                 file.getOriginalFilename(), file.getSize(), chunkSize, maxLevels);
 
         try {
-            // Validate file
-            if (file.isEmpty()) {
-                return ResponseEntity.badRequest()
-                        .body(new ProcessResponse("Error: File cannot be empty", null));
-            }
-
-            // Check file size
-            if (file.getSize() > MAX_FILE_SIZE_MB * 1024 * 1024) {
-                return ResponseEntity.badRequest()
-                        .body(new ProcessResponse("Error: File too large. Maximum allowed: " + MAX_FILE_SIZE_MB + "MB", null));
-            }
-
-            // Validate file type
-            String contentType = file.getContentType();
-            if (contentType == null || !contentType.startsWith("text/")) {
-                return ResponseEntity.badRequest()
-                        .body(new ProcessResponse("Error: Only text files are supported", null));
+            String fileValidationError = raptorControllerValidator.validateFile(file);
+            if (fileValidationError != null) {
+                return ResponseEntity.badRequest().body(new ProcessResponse(fileValidationError, null));
             }
 
             String text = new String(file.getBytes(), StandardCharsets.UTF_8);
             
-            // Validate text length
-            if (text.length() > MAX_TEXT_LENGTH) {
-                return ResponseEntity.badRequest()
-                        .body(new ProcessResponse("Error: File content too long. Maximum allowed: " + MAX_TEXT_LENGTH + " characters", null));
+            String textValidationError = raptorControllerValidator.validateTextLength(text);
+            if (textValidationError != null) {
+                return ResponseEntity.badRequest().body(new ProcessResponse(textValidationError, null));
             }
 
             RaptorResult result = raptorService.processText(text, chunkSize, maxLevels);

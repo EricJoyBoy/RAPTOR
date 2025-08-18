@@ -100,7 +100,7 @@ public class ClusteringService {
 
         return clusterMap.entrySet().stream()
                 .map(entry -> new GlobalCluster(entry.getKey(), entry.getValue()))
-                .collect(Collectors.toList());
+                .toList();
     }
 
     /**
@@ -140,7 +140,7 @@ public class ClusteringService {
                             entry.getValue().stream().map(TextEmbedding::getText).toList(),
                             entry.getValue().stream().map(TextEmbedding::getId).toList()
                     ))
-                    .collect(Collectors.toList());
+                    .toList();
 
         } catch (Exception e) {
             log.error("Local clustering failed: " + e.getMessage());
