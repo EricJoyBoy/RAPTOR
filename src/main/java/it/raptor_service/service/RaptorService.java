@@ -2,8 +2,8 @@ package it.raptor_service.service;
 
 import it.raptor_service.config.RaptorProperties;
 import it.raptor_service.model.*;
+import it.raptor_service.service.splitter.TextSplitterService;
 import lombok.extern.slf4j.Slf4j;
-
 import org.springframework.ai.chat.messages.UserMessage;
 import org.springframework.ai.chat.model.ChatModel;
 import org.springframework.ai.chat.prompt.Prompt;
@@ -14,7 +14,10 @@ import org.springframework.ai.embedding.EmbeddingResponse;
 import org.springframework.ai.ollama.api.OllamaOptions;
 import org.springframework.stereotype.Service;
 
-import java.util.*;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 
