@@ -2,6 +2,7 @@ package it.raptor_service.service;
 
 import it.raptor_service.config.RaptorProperties;
 import it.raptor_service.model.*;
+import it.raptor_service.service.clustering.ClusteringService;
 import it.raptor_service.service.splitter.TextSplitterService;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.chat.messages.UserMessage;

@@ -27,6 +27,7 @@ public class RaptorProperties {
     @Data
     public static class Clustering {
         private double clusterThreshold = 0.1;
+        private int minClusterSize = 3;
         private int maxClusters = 50;
         private int maxIterations = 100;
         private int localMaxIterations = 50;
