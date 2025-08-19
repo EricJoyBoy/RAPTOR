@@ -1,0 +1,22 @@
+# Git
+.git
+.gitignore
+
+# Maven
+target/
+pom.xml.tag
+pom.xml.next
+pom.xml.releaseBackup
+
+# IDE
+.idea/
+*.iml
+*.iws
+
+# Logs
+logs/
+*.log
+
+# Docker
+Dockerfile
+.dockerignore
