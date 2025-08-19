@@ -28,7 +28,7 @@ public class TextSplitterService {
         validateInput(text);
 
         if (tokenEstimator.estimateTokenCount(text) <= config.getChunkSize()) {
-            return Arrays.asList(text.trim());
+            return List.of(text.trim());
         }
 
         List<String> chunks = config.isPreserveSentences()
@@ -56,7 +56,7 @@ public class TextSplitterService {
                 chunks.addAll(splitRecursively(sentence, chunkSize, 0));
                 continue;
             }
-            if (currentChunk.length() == 0) {
+            if (currentChunk.isEmpty()) {
                 currentChunk.append(sentence);
                 continue;
             }
@@ -69,7 +69,7 @@ public class TextSplitterService {
                 currentChunk.append(" ").append(sentence);
             }
         }
-        if (currentChunk.length() > 0) {
+        if (!currentChunk.isEmpty()) {
             chunks.add(currentChunk.toString());
         }
         return chunks;
@@ -109,7 +109,7 @@ public class TextSplitterService {
             }
         }
 
-        if (currentChunk.length() > 0) {
+        if (!currentChunk.isEmpty()) {
             result.add(currentChunk.toString());
         }
         return result;
@@ -153,7 +153,7 @@ public class TextSplitterService {
                     break;
                 }
             }
-            if (overlap.length() > 0) {
+            if (!overlap.isEmpty()) {
                 return overlap.toString().trim();
             }
         }
