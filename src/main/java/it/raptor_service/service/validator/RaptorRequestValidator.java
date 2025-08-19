@@ -1,7 +1,7 @@
 package it.raptor_service.service.validator;
 
 
-import it.raptor_service.controller.RaptorController.ProcessRequest;
+import it.raptor_service.web.rest.RaptorController.ProcessRequest;
 import jakarta.validation.ConstraintValidator;
 import jakarta.validation.ConstraintValidatorContext;
 

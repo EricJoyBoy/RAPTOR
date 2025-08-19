@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import it.raptor_service.model.RaptorResult;
 import it.raptor_service.service.RaptorService;
 import it.raptor_service.service.validator.RaptorControllerValidator;
+import it.raptor_service.web.rest.RaptorController;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;

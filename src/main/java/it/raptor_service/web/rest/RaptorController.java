@@ -1,4 +1,4 @@
-package it.raptor_service.controller;
+package it.raptor_service.web.rest;
 
 
 import it.raptor_service.model.ProcessResponse;
