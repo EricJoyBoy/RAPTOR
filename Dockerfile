@@ -27,3 +27,7 @@ EXPOSE 8080
 
 # Run the application
 ENTRYPOINT ["java", "-jar", "raptor-service-1.0.0.jar"]
+
+# Add a health check
+HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
+  CMD curl --fail http://localhost:8080/api/raptor/health || exit 1
