@@ -9,62 +9,33 @@ The RAPTOR (Recursive Abstractive Processing for Text Organization and Retrieval
 ### Technology Stack
 
 - **Framework**: Spring Boot 3.2.0 with Java 21
-- **AI Integration**: Spring AI 1.0.0-M6 with Ollama integration
+- **AI Integration**: Spring AI `1.0.0-M6` (with some modules on `M5`, `M7` and `1.0.1`) with Ollama integration
 - **Clustering**: Weka 3.8.6 for machine learning algorithms
 - **Document Processing**: Apache Tika 2.9.1 for file parsing
 - **Build Tool**: Maven
 
 ### Architecture Components
 
-#### 1. Presentation Layer
-```
-RaptorController
-├── /api/raptor/process (POST) - Process text input
-├── /api/raptor/process-file (POST) - Process uploaded files
-└── /api/raptor/health (GET) - Health check
-```
+#### 1. Presentation Layer (web)
+- **`RaptorController`**: Exposes REST endpoints for processing text and files.
+  - `POST /api/raptor/process`: Processes raw text input.
+  - `POST /api/raptor/process-file`: Processes uploaded files.
+  - `GET /api/raptor/health`: Provides a simple health check.
 
-**Responsibilities:**
-- Handle HTTP requests and responses
-- Validate input parameters
-- Convert between DTOs and domain objects
-- Provide REST API endpoints
+#### 2. Service Layer (service)
+- **`RaptorService`**: The main orchestrator that implements the core RAPTOR algorithm.
+- **`TextSplitterService`**: Handles the logic for splitting large texts into smaller, manageable chunks.
+- **`ClusteringService`**: Performs hierarchical clustering on text embeddings using the Weka library.
 
-#### 2. Service Layer
-```
-RaptorService (Main Orchestrator)
-├── TextSplitterService - Text chunking
-├── ClusteringService - Embedding clustering
-└── External AI Services (Ollama)
-```
+#### 3. Configuration Management (config)
+- **`RaptorProperties`**: A `@ConfigurationProperties` class that centralizes all application settings, such as default chunk size, max processing levels, and feature flags for proposed features (e.g., caching, async processing).
+- **AI Configuration**: Beans for `ChatModel` and `EmbeddingModel` are configured to connect to the Ollama service.
 
-**Responsibilities:**
-- **RaptorService**: Orchestrates the entire RAPTOR algorithm
-- **TextSplitterService**: Splits large texts into manageable chunks
-- **ClusteringService**: Performs hierarchical clustering on embeddings
-
-#### 3. Configuration Layer
-```
-OllamaConfiguration
-├── ChatClient - For text summarization
-└── EmbeddingModel - For text embeddings
-```
-
-**Responsibilities:**
-- Configure AI model connections
-- Manage Spring AI integration
-- Handle Ollama API configuration
-
-#### 4. Model Layer
-```
-Data Models
-├── RaptorResult - Final processing result
-├── LevelResult - Per-level processing results
-├── Cluster - Clustering results
-├── ClusterSummary - Generated summaries
-├── TextEmbedding - Text with vector representation
-└── ProcessResponse - API response wrapper
-```
+#### 4. Data Models (model)
+- **`RaptorResult`**: The final result object containing the entire hierarchical structure.
+- **`LevelResult`**: Contains the results for a single level of the hierarchy, including embeddings and clusters.
+- **`Cluster` & `ClusterSummary`**: Represent groups of similar text and their generated summaries.
+- **`TextEmbedding`**: A data class holding the text and its corresponding vector embedding.
 
 ### Data Flow
 
@@ -118,257 +89,181 @@ Data Models
 - **Summarization**: AI-powered content summarization
 - **Hierarchical Structure**: Building tree-like document organization
 
-## Current Strengths
+### Strengths
 
-1. **Modular Design**: Clear separation of concerns with dedicated services
-2. **Flexible AI Integration**: Spring AI abstraction allows easy model switching
-3. **Robust Error Handling**: Graceful fallbacks for clustering failures
-4. **Configurable Parameters**: Adjustable chunk size and max levels
-5. **File Upload Support**: Handles both text input and file uploads
-6. **Health Monitoring**: Built-in health check endpoint
+1. **Modular Design**: Clear separation of concerns with dedicated services for text splitting, clustering, and orchestration.
+2. **Flexible AI Integration**: Spring AI abstraction allows for easy switching between different AI models and providers.
+3. **Configuration Driven**: Utilizes a `RaptorProperties` class for centralized management of application settings and feature flags.
+4. **Basic Error Handling**: Includes graceful fallbacks for clustering and summarization failures at each level of processing.
+5. **File Upload Support**: Handles both raw text input and file uploads (`.txt`, `.pdf`, etc.) through Apache Tika.
+6. **Health Monitoring**: Provides a basic health check endpoint (`/api/raptor/health`).
 
-## Identified Issues and Improvements
+### Limitations
+
+1. **Synchronous Processing**: All API calls are blocking, which can lead to long wait times for large documents.
+2. **No Persistence**: Processing results are not stored and are lost after the request is complete.
+3. **Stateless**: The service does not maintain any state between requests.
+4. **Basic Security**: Lacks advanced security features like rate limiting or authentication.
+5. **Limited Observability**: While logging is implemented, there are no metrics or distributed tracing capabilities.
+
+## Proposed Architectural Improvements
+
+This section outlines a roadmap for enhancing the RAPTOR service from its current state into a more robust, scalable, and production-ready application. The following are proposed improvements, many of which already have feature flags in the `RaptorProperties` file.
 
 ### 1. **Performance and Scalability**
 
-**Current Issues:**
-- Synchronous processing blocks the entire request
-- No caching mechanism for repeated requests
-- Memory-intensive embedding storage
-- No request queuing for large files
-
-**Improvements:**
-```java
-// Add async processing
-@Async
-public CompletableFuture<RaptorResult> processTextAsync(String text, int chunkSize, int maxLevels)
-
-// Add caching
-@Cacheable(value = "raptor-results", key = "#text.hashCode() + '_' + #chunkSize + '_' + #maxLevels")
-public RaptorResult processText(String text, int chunkSize, int maxLevels)
-
-// Add request queuing
-@RabbitListener(queues = "raptor-processing-queue")
-public void processQueuedRequest(ProcessRequest request)
-```
+- **Asynchronous Processing**: Implement non-blocking processing to handle long-running tasks without blocking API requests.
+  ```java
+  @Async
+  public CompletableFuture<RaptorResult> processTextAsync(String text, int chunkSize, int maxLevels)
+  ```
+- **Request Queuing**: Introduce a message queue (e.g., RabbitMQ or Kafka) to manage incoming requests and prevent server overload.
+  ```java
+  @RabbitListener(queues = "raptor-processing-queue")
+  public void processQueuedRequest(ProcessRequest request)
+  ```
+- **Caching**: Implement a caching layer (e.g., Redis or Caffeine) to store and retrieve results for repeated requests, reducing redundant processing.
+  ```java
+  @Cacheable(value = "raptor-results", key = "#text.hashCode() + '_' + #chunkSize + '_' + #maxLevels")
+  public RaptorResult processText(String text, int chunkSize, int maxLevels)
+  ```
 
 ### 2. **Error Handling and Resilience**
 
-**Current Issues:**
-- Limited error recovery mechanisms
-- No retry logic for AI service failures
-- Missing circuit breaker pattern
-- Inadequate logging for debugging
+- **Circuit Breaker**: Integrate a circuit breaker pattern (e.g., Resilience4j) to prevent cascading failures when external AI services are unavailable.
+  ```java
+  @CircuitBreaker(name = "ollama-service", fallbackMethod = "fallbackEmbedding")
+  public List<TextEmbedding> generateEmbeddings(List<String> texts)
+  ```
+- **Retry Mechanism**: Add automatic retries for failed requests to AI services to handle transient network issues.
+  ```java
+  @Retry(name = "ai-service-retry", fallbackMethod = "fallbackSummarization")
+  public String generateSummary(String context)
+  ```
+- **Enhanced Logging**: Implement structured logging to provide more detailed and searchable logs for debugging.
 
-**Improvements:**
-```java
-// Add circuit breaker
-@CircuitBreaker(name = "ollama-service", fallbackMethod = "fallbackEmbedding")
-public List<TextEmbedding> generateEmbeddings(List<String> texts)
+### 3. **Monitoring and Observability**
 
-// Add retry mechanism
-@Retry(name = "ai-service-retry", fallbackMethod = "fallbackSummarization")
-public String generateSummary(String context)
+- **Metrics Collection**: Integrate Micrometer and Prometheus to collect application metrics (e.g., request latency, error rates, cluster counts).
+  ```java
+  @Timed(name = "raptor.processing.time")
+  @Counted(name = "raptor.requests.total")
+  public RaptorResult processText(String text, int chunkSize, int maxLevels)
+  ```
+- **Distributed Tracing**: Add support for distributed tracing (e.g., Jaeger or Zipkin) to trace requests across different components.
+  ```java
+  @NewSpan("raptor-processing")
+  public RaptorResult processText(String text, int chunkSize, int maxLevels)
+  ```
+- **External Service Health Checks**: Implement detailed health indicators for external dependencies like the Ollama service.
+  ```java
+  @Component
+  public class OllamaHealthIndicator implements HealthIndicator {
+      @Override
+      public Health health() {
+          // Check Ollama service availability
+      }
+  }
+  ```
 
-// Add comprehensive logging
-@Slf4j
-public class RaptorService {
-    public RaptorResult processText(String text, int chunkSize, int maxLevels) {
-        log.info("Processing text with chunkSize={}, maxLevels={}", chunkSize, maxLevels);
-        // ... processing logic
-    }
-}
-```
+### 4. **Security and Validation**
 
-### 3. **Configuration Management**
+- **Input Validation**: Enhance input validation using `@Valid` to protect against invalid or malicious payloads.
+  ```java
+  @Valid
+  public ResponseEntity<ProcessResponse> processText(@RequestBody @Valid ProcessRequest request)
+  ```
+- **Rate Limiting**: Implement rate limiting to prevent abuse and ensure fair usage.
+  ```java
+  @RateLimiter(name = "raptor-api")
+  public ResponseEntity<ProcessResponse> processText(@RequestBody ProcessRequest request)
+  ```
+- **File Size Limits**: Enforce strict file size limits to prevent resource exhaustion attacks.
+  ```java
+  @PostMapping("/process-file")
+  public ResponseEntity<ProcessResponse> processFile(
+      @RequestParam("file") @MaxFileSize(maxSize = "10MB") MultipartFile file)
+  ```
 
-**Current Issues:**
-- Hard-coded parameters in services
-- Limited environment-specific configuration
-- No feature flags for algorithm variants
+### 5. **Data Management**
 
-**Improvements:**
-```java
-@ConfigurationProperties(prefix = "raptor")
-public class RaptorProperties {
-    private int defaultChunkSize = 2000;
-    private int defaultMaxLevels = 3;
-    private double clusterThreshold = 0.1;
-    private int maxClusters = 50;
-    private boolean enableCaching = true;
-    private boolean enableAsyncProcessing = false;
-}
-```
-
-### 4. **Monitoring and Observability**
-
-**Current Issues:**
-- No metrics collection
-- Limited tracing capabilities
-- No performance monitoring
-- Missing health checks for external services
-
-**Improvements:**
-```java
-// Add metrics
-@Timed(name = "raptor.processing.time")
-@Counted(name = "raptor.requests.total")
-public RaptorResult processText(String text, int chunkSize, int maxLevels)
-
-// Add distributed tracing
-@NewSpan("raptor-processing")
-public RaptorResult processText(String text, int chunkSize, int maxLevels)
-
-// Add health indicators
-@Component
-public class OllamaHealthIndicator implements HealthIndicator {
-    @Override
-    public Health health() {
-        // Check Ollama service availability
-    }
-}
-```
-
-### 5. **Security and Validation**
-
-**Current Issues:**
-- No input validation beyond basic checks
-- Missing rate limiting
-- No authentication/authorization
-- Potential for resource exhaustion attacks
-
-**Improvements:**
-```java
-// Add input validation
-@Valid
-public ResponseEntity<ProcessResponse> processText(@RequestBody @Valid ProcessRequest request)
-
-// Add rate limiting
-@RateLimiter(name = "raptor-api")
-public ResponseEntity<ProcessResponse> processText(@RequestBody ProcessRequest request)
-
-// Add file size limits
-@PostMapping("/process-file")
-public ResponseEntity<ProcessResponse> processFile(
-    @RequestParam("file") @MaxFileSize(maxSize = "10MB") MultipartFile file)
-```
+- **Result Persistence**: Add a database (e.g., PostgreSQL or MongoDB) to store processing results, allowing users to retrieve them later.
+  ```java
+  @Entity
+  public class ProcessingResult {
+      @Id
+      private String id;
+      private String inputHash;
+      private RaptorResult result;
+      private LocalDateTime createdAt;
+      private ProcessingStatus status;
+  }
+  ```
+- **Data Versioning**: Implement result versioning to track changes if reprocessing occurs.
+  ```java
+  @Version
+  private Long version;
+  ```
+- **Data Retention Policies**: Create a scheduled job to clean up old results and manage data lifecycle.
+  ```java
+  @Scheduled(fixedRate = 86400000) // Daily
+  public void cleanupOldResults() {
+      // Remove results older than 30 days
+  }
+  ```
 
 ### 6. **Testing Strategy**
 
-**Current Issues:**
-- Limited test coverage
-- No integration tests
-- Missing performance tests
-- No AI service mocking
+- **Integration Tests**: Develop a comprehensive suite of integration tests that cover the entire processing pipeline.
+  ```java
+  @SpringBootTest
+  @AutoConfigureTestDatabase
+  class RaptorServiceIntegrationTest {
+      // Test with real or mocked AI services
+  }
+  ```
+- **Performance Tests**: Create performance benchmarks to measure and track the performance of the service over time.
+  ```java
+  @Benchmark
+  public void benchmarkTextProcessing() {
+      // Performance benchmarking
+  }
+  ```
+- **AI Service Mocking**: Utilize `spring-ai-test` to mock AI service responses and ensure predictable test outcomes.
 
-**Improvements:**
-```java
-// Add comprehensive unit tests
-@Test
-void shouldProcessTextWithValidInput() {
-    // Test with mocked AI services
-}
+### 7. **Microservices Architecture**
 
-// Add integration tests
-@SpringBootTest
-@AutoConfigureTestDatabase
-class RaptorServiceIntegrationTest {
-    // Test with real AI services
-}
+For large-scale deployments, the monolithic service can be decomposed into a set of specialized microservices:
 
-// Add performance tests
-@Benchmark
-public void benchmarkTextProcessing() {
-    // Performance benchmarking
-}
-```
+- **API Gateway (Spring Cloud Gateway)**: A single entry point for all client requests.
+- **Service Discovery (Eureka/Consul)**: Allows services to find and communicate with each other dynamically.
+- **Configuration Server (Spring Cloud Config)**: Centralizes configuration management for all services.
+- **Raptor Processing Service**: The core service responsible for the RAPTOR algorithm.
+- **Raptor Queue Service**: Manages the request queue and worker nodes.
+- **Raptor Cache Service**: A dedicated service for caching results.
 
-### 7. **Architecture Enhancements**
+## Implementation Roadmap
 
-**Proposed New Components:**
+A phased approach is recommended to implement these improvements.
 
-```
-Enhanced Architecture
-├── API Gateway (Spring Cloud Gateway)
-├── Service Discovery (Eureka)
-├── Configuration Server (Spring Cloud Config)
-├── Message Queue (RabbitMQ/Kafka)
-├── Cache Layer (Redis)
-├── Monitoring (Prometheus + Grafana)
-├── Tracing (Jaeger/Zipkin)
-└── Load Balancer (Nginx)
-```
+### Phase 1: Foundational Improvements
+1.  **Enhanced Error Handling & Logging**: Implement circuit breakers, retries, and structured logging.
+2.  **Comprehensive Testing**: Build a robust suite of unit, integration, and performance tests.
+3.  **Security Hardening**: Add input validation, rate limiting, and file size limits.
+4.  **Detailed Health Checks**: Implement health checks for all external dependencies.
 
-**New Service Structure:**
-```
-Enhanced Services
-├── RaptorOrchestratorService - Main orchestrator
-├── RaptorProcessingService - Core processing logic
-├── RaptorCachingService - Result caching
-├── RaptorQueueService - Request queuing
-├── RaptorMonitoringService - Metrics and health
-└── RaptorSecurityService - Security and validation
-```
+### Phase 2: Performance Enhancements
+1.  **Asynchronous Processing**: Introduce async endpoints for long-running jobs.
+2.  **Caching Layer**: Implement a caching solution to reduce redundant processing.
+3.  **Request Queuing**: Add a message queue to manage workload and improve reliability.
 
-### 8. **Data Management**
-
-**Current Issues:**
-- No persistent storage for results
-- No result versioning
-- Missing data retention policies
-
-**Improvements:**
-```java
-// Add result persistence
-@Entity
-public class ProcessingResult {
-    @Id
-    private String id;
-    private String inputHash;
-    private RaptorResult result;
-    private LocalDateTime createdAt;
-    private ProcessingStatus status;
-}
-
-// Add result versioning
-@Version
-private Long version;
-
-// Add data retention
-@Scheduled(fixedRate = 86400000) // Daily
-public void cleanupOldResults() {
-    // Remove results older than 30 days
-}
-```
-
-## Implementation Priority
-
-### Phase 1: Critical Improvements (1-2 weeks)
-1. Add comprehensive error handling and logging
-2. Implement input validation and security measures
-3. Add health checks for external services
-4. Create comprehensive test suite
-
-### Phase 2: Performance Enhancements (2-3 weeks)
-1. Implement async processing
-2. Add caching layer
-3. Implement request queuing
-4. Add monitoring and metrics
-
-### Phase 3: Scalability Features (3-4 weeks)
-1. Implement microservices architecture
-2. Add service discovery and load balancing
-3. Implement distributed tracing
-4. Add configuration management
-
-### Phase 4: Advanced Features (4-6 weeks)
-1. Add result persistence and versioning
-2. Implement advanced clustering algorithms
-3. Add support for multiple AI providers
-4. Create admin dashboard
+### Phase 3: Scalability & Enterprise Features
+1.  **Result Persistence**: Implement a database to store and manage processing results.
+2.  **Observability**: Add metrics and distributed tracing.
+3.  **Microservices Decomposition**: If required, begin breaking the monolith into smaller, specialized services.
 
 ## Conclusion
 
-The current RAPTOR service provides a solid foundation for hierarchical text processing. The modular design and Spring AI integration make it flexible and extensible. However, implementing the suggested improvements will significantly enhance its production readiness, performance, and maintainability.
+The RAPTOR service is currently a functional, single-purpose application that effectively implements the core RAPTOR algorithm. The existing design is modular and flexible, providing a solid foundation for future development.
 
-The phased implementation approach ensures that critical issues are addressed first while building toward a more robust, scalable architecture that can handle enterprise-level workloads.
+By following the proposed roadmap, the service can be evolved into a production-grade, scalable, and resilient application capable of handling enterprise-level workloads. The phased approach ensures that foundational improvements are prioritized, delivering value incrementally while managing complexity.
