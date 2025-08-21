@@ -105,6 +105,8 @@ class RaptorControllerTest {
                 new byte[0]
         );
 
+        when(raptorControllerValidator.validateFile(any())).thenReturn("Error: File cannot be empty");
+
         mockMvc.perform(MockMvcRequestBuilders.multipart("/api/raptor/process-file")
                         .file(file))
                 .andExpect(status().isBadRequest())
@@ -122,6 +124,8 @@ class RaptorControllerTest {
                 largeContent
         );
 
+        when(raptorControllerValidator.validateFile(any())).thenReturn("Error: File too large. Maximum allowed: 10MB");
+
         mockMvc.perform(MockMvcRequestBuilders.multipart("/api/raptor/process-file")
                         .file(file))
                 .andExpect(status().isBadRequest())
@@ -136,6 +140,8 @@ class RaptorControllerTest {
                 "image/jpeg",
                 "image content".getBytes()
         );
+
+        when(raptorControllerValidator.validateFile(any())).thenReturn("Error: Only text files are supported");
 
         mockMvc.perform(MockMvcRequestBuilders.multipart("/api/raptor/process-file")
                         .file(file))
@@ -157,6 +163,8 @@ class RaptorControllerTest {
                 "text/plain",
                 longText.toString().getBytes()
         );
+
+        when(raptorControllerValidator.validateTextLength(any())).thenReturn("Error: File content too long. Maximum allowed: 1000000 characters");
 
         mockMvc.perform(MockMvcRequestBuilders.multipart("/api/raptor/process-file")
                         .file(file))
