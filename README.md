@@ -1,5 +1,6 @@
 
 # RAPTOR Service
+[![Build and Test](https://github.com/EricJoyBoy/RAPTOR/actions/workflows/build.yml/badge.svg)](https://github.com/EricJoyBoy/RAPTOR/actions/workflows/build.yml)
 
 This project implements the RAPTOR (Recursive Abstractive Processing for Tree-Organized Retrieval) algorithm using Spring AI.
 
