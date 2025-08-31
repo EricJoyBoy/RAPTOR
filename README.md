@@ -1,5 +1,9 @@
 
 # RAPTOR Service
+## Deepwiki
+
+[![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/EricJoyBoy/RAPTOR)
+
 [![Build and Test](https://github.com/EricJoyBoy/RAPTOR/actions/workflows/build.yml/badge.svg)](https://github.com/EricJoyBoy/RAPTOR/actions/workflows/build.yml)
 [![Dependabot Updates](https://github.com/EricJoyBoy/RAPTOR/actions/workflows/dependabot/dependabot-updates/badge.svg)](https://github.com/EricJoyBoy/RAPTOR/actions/workflows/dependabot/dependabot-updates)
 [![CodeQL](https://github.com/EricJoyBoy/RAPTOR/actions/workflows/codeql.yml/badge.svg)](https://github.com/EricJoyBoy/RAPTOR/actions/workflows/codeql.yml)
